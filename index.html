@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Focus — Pomodoro Timer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --focus-bg: #0f0f0f;
+    --focus-surface: #171717;
+    --focus-ring: #e8d5b0;
+    --focus-accent: #c9a96e;
+    --focus-text: #f0ebe0;
+    --focus-muted: #6b6460;
+    --focus-border: #2a2520;
+
+    --break-bg: #0a0f0f;
+    --break-surface: #111818;
+    --break-ring: #8ecfc4;
+    --break-accent: #5ab5a8;
+    --break-text: #e0efed;
+    --break-muted: #4a6660;
+    --break-border: #1a2828;
+
+    --bg: var(--focus-bg);
+    --surface: var(--focus-surface);
+    --ring: var(--focus-ring);
+    --accent: var(--focus-accent);
+    --text: var(--focus-text);
+    --muted: var(--focus-muted);
+    --border: var(--focus-border);
+
+    --radius: 16px;
+    --transition: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 32px 16px 48px;
+    transition: background var(--transition), color var(--transition);
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(200,170,100,0.07) 0%, transparent 70%);
+    pointer-events: none;
+    transition: background var(--transition);
+    z-index: 0;
+  }
+
+  body.break-mode::before {
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(90,181,168,0.07) 0%, transparent 70%);
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+  }
+
+  /* ── Header ── */
+  header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color var(--transition);
+  }
+
+  .settings-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+  }
+  .settings-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(255,255,255,0.03);
+  }
+  .settings-btn svg { width: 16px; height: 16px; }
+
+  /* ── Mode Badge ── */
+  .mode-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 5px 14px;
+    transition: color var(--transition), border-color var(--transition);
+  }
+
+  /* ── Timer Ring ── */
+  .timer-wrapper {
+    position: relative;
+    width: 280px;
+    height: 280px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  @media (max-width: 380px) {
+    .timer-wrapper { width: 240px; height: 240px; }
+  }
+
+  .ring-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    transition: opacity var(--transition);
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 3;
+    transition: stroke var(--transition);
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: var(--ring);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear, stroke var(--transition);
+  }
+
+  .timer-face {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 1;
+  }
+
+  .timer-display {
+    font-family: 'DM Mono', monospace;
+    font-size: 68px;
+    font-weight: 300;
+    letter-spacing: -2px;
+    color: var(--text);
+    line-height: 1;
+    transition: color var(--transition);
+  }
+
+  @media (max-width: 380px) {
+    .timer-display { font-size: 56px; }
+  }
+
+  .timer-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color var(--transition);
+  }
+
+  /* Pulse when running */
+  @keyframes subtle-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.75; }
+  }
+  .timer-display.running {
+    animation: subtle-pulse 2s ease-in-out infinite;
+  }
+
+  /* Done flash */
+  @keyframes done-flash {
+    0% { transform: scale(1); }
+    30% { transform: scale(1.04); }
+    60% { transform: scale(0.98); }
+    100% { transform: scale(1); }
+  }
+  .timer-wrapper.done {
+    animation: done-flash 0.5s ease-out;
+  }
+
+  /* ── Controls ── */
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .btn {
+    border: none;
+    cursor: pointer;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 500;
+    border-radius: 12px;
+    transition: transform 0.15s, opacity 0.15s, background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+  .btn:active { transform: scale(0.95); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #0f0f0f;
+    font-size: 15px;
+    font-weight: 600;
+    height: 52px;
+    padding: 0 32px;
+    letter-spacing: 0.03em;
+    transition: background var(--transition), transform 0.15s, opacity 0.15s;
+  }
+  .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn-secondary {
+    background: var(--surface);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    height: 52px;
+    padding: 0 20px;
+    transition: border-color 0.2s, color 0.2s, background var(--transition);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+  /* ── Session dots ── */
+  .session-dots {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    transition: background var(--transition), border-color var(--transition);
+  }
+  .dot.filled {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  /* ── Settings Panel ── */
+  .settings-panel {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1), border-color var(--transition), background var(--transition);
+  }
+  .settings-panel.open { max-height: 200px; }
+
+  .settings-inner {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .settings-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    transition: color var(--transition);
+  }
+
+  .settings-input-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .num-btn {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.2s, color 0.2s;
+    font-family: 'DM Mono', monospace;
+    line-height: 1;
+  }
+  .num-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .num-display {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    color: var(--text);
+    min-width: 36px;
+    text-align: center;
+    transition: color var(--transition);
+  }
+
+  .settings-divider {
+    height: 1px;
+    background: var(--border);
+    transition: background var(--transition);
+  }
+
+  /* ── History ── */
+  .history-section {
+    width: 100%;
+  }
+
+  .history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .history-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--muted);
+    transition: color var(--transition);
+  }
+
+  .history-count {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    transition: color var(--transition);
+  }
+
+  .history-empty {
+    text-align: center;
+    padding: 32px 0;
+    font-size: 13px;
+    color: var(--muted);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    transition: color var(--transition), border-color var(--transition);
+  }
+
+  .history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .history-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: background var(--transition), border-color var(--transition);
+    animation: slide-in 0.3s ease-out;
+  }
+
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .history-check {
+    font-size: 13px;
+    color: var(--accent);
+    flex-shrink: 0;
+    transition: color var(--transition);
+  }
+
+  .history-duration {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 400;
+    transition: color var(--transition);
+  }
+
+  .history-type {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 400;
+    transition: color var(--transition);
+  }
+
+  .history-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+    transition: color var(--transition);
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 32px;
+    left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: var(--surface);
+    border: 1px solid var(--ring);
+    color: var(--text);
+    border-radius: 100px;
+    padding: 10px 24px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    opacity: 0;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+    z-index: 100;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <span class="logo">Focus</span>
+    <button class="settings-btn" id="settingsToggle" title="Settings" aria-label="Toggle settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- Settings -->
+  <div class="settings-panel" id="settingsPanel">
+    <div class="settings-inner">
+      <div class="settings-row">
+        <span class="settings-label">Focus duration</span>
+        <div class="settings-input-group">
+          <button class="num-btn" id="focusMinus">−</button>
+          <span class="num-display" id="focusDisplay">25</span>
+          <button class="num-btn" id="focusPlus">+</button>
+          <span class="settings-label" style="margin-left:2px">min</span>
+        </div>
+      </div>
+      <div class="settings-divider"></div>
+      <div class="settings-row">
+        <span class="settings-label">Break duration</span>
+        <div class="settings-input-group">
+          <button class="num-btn" id="breakMinus">−</button>
+          <span class="num-display" id="breakDisplay">5</span>
+          <button class="num-btn" id="breakPlus">+</button>
+          <span class="settings-label" style="margin-left:2px">min</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mode Badge -->
+  <span class="mode-badge" id="modeBadge">Focus</span>
+
+  <!-- Timer -->
+  <div class="timer-wrapper" id="timerWrapper">
+    <svg class="ring-svg" viewBox="0 0 280 280" id="ringSvg">
+      <circle class="ring-track" cx="140" cy="140" r="128"/>
+      <circle class="ring-progress" cx="140" cy="140" r="128" id="ringProgress"/>
+    </svg>
+    <div class="timer-face">
+      <div class="timer-display" id="timerDisplay">25:00</div>
+      <div class="timer-label" id="timerSubLabel">ready</div>
+    </div>
+  </div>
+
+  <!-- Session dots (4 pomodoros = 1 set) -->
+  <div class="session-dots" id="sessionDots">
+    <div class="dot" data-i="0"></div>
+    <div class="dot" data-i="1"></div>
+    <div class="dot" data-i="2"></div>
+    <div class="dot" data-i="3"></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn btn-secondary" id="resetBtn" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+      </svg>
+      Reset
+    </button>
+    <button class="btn btn-primary" id="startBtn">
+      <svg id="startIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <polygon points="5,3 19,12 5,21"/>
+      </svg>
+      <span id="startLabel">Start</span>
+    </button>
+    <button class="btn btn-secondary" id="skipBtn" disabled>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="5,4 15,12 5,20" fill="currentColor" stroke="none"/>
+        <line x1="19" y1="5" x2="19" y2="19"/>
+      </svg>
+      Skip
+    </button>
+  </div>
+
+  <!-- History -->
+  <div class="history-section">
+    <div class="history-header">
+      <span class="history-title">Today's Sessions</span>
+      <span class="history-count" id="historyCount">0 sessions</span>
+    </div>
+    <div id="historyContainer">
+      <div class="history-empty" id="historyEmpty">No sessions yet — start your first focus!</div>
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const STORAGE_KEY = 'pomodoro_history_v2';
+
+let focusMins = 25;
+let breakMins = 5;
+let currentMode = 'focus'; // 'focus' | 'break'
+let secondsLeft = focusMins * 60;
+let totalSeconds = focusMins * 60;
+let isRunning = false;
+let isPaused = false;
+let intervalId = null;
+let completedToday = 0; // focus sessions done today
+let sessionSetCount = 0; // for dot tracking (0–3)
+
+// ─────────────────────────────────────────────
+// DOM
+// ─────────────────────────────────────────────
+const body = document.body;
+const timerDisplay = document.getElementById('timerDisplay');
+const timerSubLabel = document.getElementById('timerSubLabel');
+const timerWrapper = document.getElementById('timerWrapper');
+const ringProgress = document.getElementById('ringProgress');
+const modeBadge = document.getElementById('modeBadge');
+const startBtn = document.getElementById('startBtn');
+const startIcon = document.getElementById('startIcon');
+const startLabel = document.getElementById('startLabel');
+const resetBtn = document.getElementById('resetBtn');
+const skipBtn = document.getElementById('skipBtn');
+const historyEmpty = document.getElementById('historyEmpty');
+const historyList = document.getElementById('historyList');
+const historyCount = document.getElementById('historyCount');
+const toast = document.getElementById('toast');
+const settingsToggle = document.getElementById('settingsToggle');
+const settingsPanel = document.getElementById('settingsPanel');
+const focusDisplay = document.getElementById('focusDisplay');
+const breakDisplay = document.getElementById('breakDisplay');
+const sessionDots = document.querySelectorAll('.dot');
+
+// Ring circumference
+const RADIUS = 128;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+ringProgress.style.strokeDasharray = CIRCUMFERENCE;
+ringProgress.style.strokeDashoffset = 0;
+
+// ─────────────────────────────────────────────
+// HISTORY — localStorage with daily reset
+// ─────────────────────────────────────────────
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (data.date !== todayKey()) return []; // new day → reset
+    return data.sessions || [];
+  } catch { return []; }
+}
+
+function saveHistory(sessions) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({ date: todayKey(), sessions }));
+}
+
+function addHistoryEntry(durationSecs) {
+  const sessions = loadHistory();
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
+  const mins = Math.floor(durationSecs / 60);
+  const secs = durationSecs % 60;
+  const durStr = `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
+  sessions.push({ duration: durStr, time: timeStr, ts: Date.now() });
+  saveHistory(sessions);
+  renderHistory(sessions);
+}
+
+function renderHistory(sessions) {
+  if (!sessions) sessions = loadHistory();
+  completedToday = sessions.length;
+  historyCount.textContent = `${completedToday} session${completedToday !== 1 ? 's' : ''}`;
+
+  if (sessions.length === 0) {
+    historyEmpty.style.display = 'block';
+    historyList.innerHTML = '';
+    return;
+  }
+  historyEmpty.style.display = 'none';
+  historyList.innerHTML = '';
+  // Show newest first
+  [...sessions].reverse().forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <span class="history-check">✓</span>
+      <span class="history-duration">${s.duration}</span>
+      <span class="history-type">focus</span>
+      <span class="history-time">${s.time}</span>
+    `;
+    historyList.appendChild(item);
+  });
+}
+
+// ─────────────────────────────────────────────
+// TIMER CORE
+// ─────────────────────────────────────────────
+function formatTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function updateRing() {
+  const progress = secondsLeft / totalSeconds;
+  const offset = CIRCUMFERENCE * (1 - progress);
+  ringProgress.style.strokeDashoffset = offset;
+}
+
+function setUIRunning() {
+  timerDisplay.classList.add('running');
+  startIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+  startLabel.textContent = 'Pause';
+  resetBtn.disabled = false;
+  skipBtn.disabled = false;
+  timerSubLabel.textContent = currentMode === 'focus' ? 'focusing' : 'on break';
+}
+
+function setUIPaused() {
+  timerDisplay.classList.remove('running');
+  startIcon.innerHTML = '<polygon points="5,3 19,12 5,21"/>';
+  startLabel.textContent = 'Resume';
+  timerSubLabel.textContent = 'paused';
+}
+
+function setUIReady() {
+  timerDisplay.classList.remove('running');
+  startIcon.innerHTML = '<polygon points="5,3 19,12 5,21"/>';
+  startLabel.textContent = 'Start';
+  resetBtn.disabled = true;
+  skipBtn.disabled = true;
+  timerSubLabel.textContent = 'ready';
+}
+
+function applyMode(mode) {
+  currentMode = mode;
+  body.classList.toggle('break-mode', mode === 'break');
+  modeBadge.textContent = mode === 'focus' ? 'Focus' : 'Break';
+  totalSeconds = mode === 'focus' ? focusMins * 60 : breakMins * 60;
+  secondsLeft = totalSeconds;
+  timerDisplay.textContent = formatTime(secondsLeft);
+  updateRing();
+  // Update CSS vars via class
+  document.documentElement.style.setProperty('--ring', mode === 'focus' ? 'var(--focus-ring)' : 'var(--break-ring)');
+  document.documentElement.style.setProperty('--accent', mode === 'focus' ? 'var(--focus-accent)' : 'var(--break-accent)');
+}
+
+function updateDots() {
+  sessionDots.forEach((dot, i) => {
+    dot.classList.toggle('filled', i < (sessionSetCount % 4));
+  });
+}
+
+function tick() {
+  if (secondsLeft <= 0) {
+    clearInterval(intervalId);
+    intervalId = null;
+    onCycleEnd();
+    return;
+  }
+  secondsLeft--;
+  timerDisplay.textContent = formatTime(secondsLeft);
+  updateRing();
+}
+
+function onCycleEnd() {
+  playDone();
+  timerWrapper.classList.add('done');
+  setTimeout(() => timerWrapper.classList.remove('done'), 600);
+
+  if (currentMode === 'focus') {
+    const focusedSecs = focusMins * 60; // record full duration
+    addHistoryEntry(focusedSecs);
+    sessionSetCount++;
+    updateDots();
+    showToast('Focus complete! Time for a break ☕');
+    setTimeout(() => {
+      applyMode('break');
+      startTimer();
+    }, 800);
+  } else {
+    showToast('Break over — back to it!');
+    setTimeout(() => {
+      applyMode('focus');
+      startTimer();
+    }, 800);
+  }
+}
+
+function startTimer() {
+  isRunning = true;
+  isPaused = false;
+  setUIRunning();
+  intervalId = setInterval(tick, 1000);
+}
+
+function pauseTimer() {
+  isRunning = false;
+  isPaused = true;
+  clearInterval(intervalId);
+  intervalId = null;
+  setUIPaused();
+}
+
+function resetTimer() {
+  clearInterval(intervalId);
+  intervalId = null;
+  isRunning = false;
+  isPaused = false;
+  applyMode('focus');
+  setUIReady();
+  updateRing();
+}
+
+// ─────────────────────────────────────────────
+// SOUND — Web Audio API beep
+// ─────────────────────────────────────────────
+function playDone() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const notes = [523.25, 659.25, 783.99]; // C5, E5, G5
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.25, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.start(t);
+      osc.stop(t + 0.52);
+    });
+  } catch(e) {}
+}
+
+// ─────────────────────────────────────────────
+// TOAST
+// ─────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+}
+
+// ─────────────────────────────────────────────
+// BUTTON HANDLERS
+// ─────────────────────────────────────────────
+startBtn.addEventListener('click', () => {
+  if (isRunning) {
+    pauseTimer();
+  } else {
+    startTimer();
+  }
+});
+
+resetBtn.addEventListener('click', () => {
+  resetTimer();
+});
+
+skipBtn.addEventListener('click', () => {
+  clearInterval(intervalId);
+  intervalId = null;
+  isRunning = false;
+  isPaused = false;
+  // Skip doesn't add to history
+  const nextMode = currentMode === 'focus' ? 'break' : 'focus';
+  if (currentMode === 'focus') { sessionSetCount++; updateDots(); }
+  applyMode(nextMode);
+  setUIReady();
+});
+
+settingsToggle.addEventListener('click', () => {
+  settingsPanel.classList.toggle('open');
+});
+
+// Settings inputs
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+document.getElementById('focusMinus').addEventListener('click', () => {
+  focusMins = clamp(focusMins - 1, 1, 60);
+  focusDisplay.textContent = focusMins;
+  if (!isRunning && !isPaused && currentMode === 'focus') {
+    secondsLeft = totalSeconds = focusMins * 60;
+    timerDisplay.textContent = formatTime(secondsLeft);
+    updateRing();
+  }
+});
+document.getElementById('focusPlus').addEventListener('click', () => {
+  focusMins = clamp(focusMins + 1, 1, 60);
+  focusDisplay.textContent = focusMins;
+  if (!isRunning && !isPaused && currentMode === 'focus') {
+    secondsLeft = totalSeconds = focusMins * 60;
+    timerDisplay.textContent = formatTime(secondsLeft);
+    updateRing();
+  }
+});
+document.getElementById('breakMinus').addEventListener('click', () => {
+  breakMins = clamp(breakMins - 1, 1, 30);
+  breakDisplay.textContent = breakMins;
+  if (!isRunning && !isPaused && currentMode === 'break') {
+    secondsLeft = totalSeconds = breakMins * 60;
+    timerDisplay.textContent = formatTime(secondsLeft);
+    updateRing();
+  }
+});
+document.getElementById('breakPlus').addEventListener('click', () => {
+  breakMins = clamp(breakMins + 1, 1, 30);
+  breakDisplay.textContent = breakMins;
+  if (!isRunning && !isPaused && currentMode === 'break') {
+    secondsLeft = totalSeconds = breakMins * 60;
+    timerDisplay.textContent = formatTime(secondsLeft);
+    updateRing();
+  }
+});
+
+// Page Visibility API — keep timer accurate when tab backgrounded
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden || !isRunning) return;
+  // Re-sync in case of drift (not needed for simple 1s intervals, but good practice)
+});
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+applyMode('focus');
+setUIReady();
+renderHistory();
+updateDots();
+</script>
+</body>
+</html>
