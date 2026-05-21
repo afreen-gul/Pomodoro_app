@@ -12,7 +12,7 @@ No additional installation or dependencies are required because the project is b
 
 ### Deployed URL
 
-(Add your deployed URL here if available)
+https://pomodoro-l3cq2epl3-afreen-gul-s-projects.vercel.app
 
 ---
 
